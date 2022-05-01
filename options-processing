@@ -1,0 +1,95 @@
+#!/usr/bin/env bash
+
+declare -a ORIG      # original arguments
+declare -a ARG       # remaining arguments after processing
+declare -A options   # ouput is found in ${options[something]}
+declare -A optspeco  # option definitions (no arg)
+declare -A optspeca  # option definitions (with arg)
+declare -A optspecd  # defaults for optspeca
+
+optspeco[h]="this help"
+ARGUMENT_FORMAT='[opts]'
+
+function options-help { # {{{
+    e=$1
+    [ -z "$e" ] || echo
+    echo "$(basename "$0") $ARGUMENT_FORMAT"
+
+    spaces=""
+    if [ ${#optspeca[@]} -gt 0 ]; then
+        for o in ${!optspeca[@]}; do
+            if [ -n "${optspecd[$o]}" ]
+            then echo "  -$o arg  ${optspeca[$o]}" \
+               | sed -e $'s\eDDD\e(default: '"${optspecd[$o]}"$')\eg'
+            else echo "  -$o arg  ${optspeca[$o]}"
+            fi
+        done
+        spaces="    "
+    fi
+
+    if [ ${#optspeco[@]} -gt 0 ]; then
+        for o in ${!optspeco[@]}; do
+            echo "  -$o$indent$spaces  ${optspeco[$o]}"
+        done
+    fi
+
+    if [[ "$(type extra-help 2>/dev/null)" =~ function ]]; then
+        echo
+        extra-help
+    fi
+
+    exit ${e:-0}
+}
+
+# }}}
+function process-options { # {{{
+    optspec=""
+    for o in ${!optspeca[@]}; do optspec+=$o:; done
+    for o in ${!optspeco[@]}; do optspec+=$o ; done
+    for o in ${!optspecd[@]}; do options[$o]="${optspecd[$o]}"; done
+
+    if [ -n "$DEBUG_OPTIONS_PROCESSING" ]; then
+        echo "DEBUG_OPTIONS_PROCERSSING before"
+        for k in "${!options[@]}"; do
+            echo "options[$k]=${options[$k]}"
+        done
+        echo "ARG=( ${ARG[*]} )"
+        echo
+    fi
+
+    ORIG=( "$@" )
+
+    dieafter=0
+    ax=0
+    while getopts "$optspec" _o; do
+        [ $? -gt 0 ] && dieafter=1 # happens when argument to (eg f:) is not given
+        case "$_o" in
+            h) options-help ;;
+           \?) dieafter=1 ;; # given an arg that doesn't exist
+            *) if [ $(( OPTIND - ax )) = 3 ]; # two for one and 3 for two (?? yeah, apparently)
+               then options[$_o]="$OPTARG"
+               else options[$_o]=1
+               fi
+               ;;
+        esac
+        ax=$(( OPTIND - 1 ))
+    done
+
+    shift $ax # remove option args from the stack
+
+    [ $dieafter -gt 0 ] && help 1
+    [ "$1" = "--" ] && shift  # only works if -- happens to be the first non-opt arg
+
+    ARG=( "$@" )
+
+    if [ -n "$DEBUG_OPTIONS_PROCESSING" ]; then
+        echo "DEBUG_OPTIONS_PROCERSSING after"
+        for k in "${!options[@]}"; do
+            echo "options[$k]=${options[$k]}"
+        done
+        echo "ARG=( ${ARG[*]} )"
+        exit 0
+    fi
+}
+
+# }}}

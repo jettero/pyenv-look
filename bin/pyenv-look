@@ -1,0 +1,69 @@
+#!/usr/bin/env bash
+
+ROOT="$( dirname "$( dirname "$0" )" )"
+source "$ROOT"/options-processing
+
+optspeco[h]="this help"
+optspeco[v]="vim the found files"
+function extra-help { echo "usage: pyenv look module.name.here [grep args here]"; }
+process-options "$@"; set -- "${ARG[@]}"
+
+mod="$1"; shift
+[ -n "$mod" ] || exit
+
+mpath=$(python -c "
+try:
+    import $mod
+    print($mod.__path__[0])
+except ModuleNotFoundError:
+    pass
+")
+
+function do_search {
+    if [ $# -gt 0 -a -n "$mpath" -a -d "$mpath" ]
+    then find "$mpath" -type f -name \*.py -print0 | xargs -r0 grep --color=auto "$@"
+    else echo "$mpath"
+    fi
+}
+
+if [ -n "${options[v]}" ]; then 
+    IFS=$'\n'
+    results=( $(do_search "$@" -l) )
+    vim -o "${results[@]}"
+
+else do_search "$@"
+fi
+
+# SOMETIMES HANDY THINGS:
+
+# I have such a hard time remembering how to read lines into an array …
+# read -d '' -r -a lines < <( echo "first line"; echo "second line"; echo "input-file: ${options[i]}" )
+
+# shopt -s checkwinsize # update LINES/COLUMNS after every command
+# export PS4="[1;32m....oO: [m"; set -x
+# trap "echo \"ERROR(\$?) at \$0 line \${LINENO}\"; sleep 1" ERR
+# trap "exit 1" SIGINT # fucking die when I fucking say
+# tmp=$(mktemp); [ -n "$tmp" -a -f "$tmp" ] || exit 1; trap "rm $tmp" 0 1 2 5 15
+
+#   # close stdout and stderr
+#   exec 1<&-
+#   exec 2<&-
+#
+#   # open as a log
+#   exec 1<>~/.xinit.log
+#   exec 2>&1
+
+# poor man's http:
+#   #!/bin/bash
+#   exec 3<>/dev/tcp/"$1"/80
+#   echo -e "GET / HTTP/1.1\n" >&3
+#   cat <&3
+
+# extra pipe:
+#  pfname=$(mktemp -u)
+#  mkfifo $pfname
+#  exec 3<>$pfname
+#  rm $pfname
+#  echo supz >&3
+#  head -n1 <&3
+#  exec 3>&-
